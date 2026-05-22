@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Net/UnrealNetwork.h"
 #include "InventoryComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);
@@ -15,67 +16,150 @@ class INVENTORYFRAMEWORK_API UInventoryComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
-public:	
+public:
+
 	// Constructor
 	UInventoryComponent();
 
+	virtual bool ReplicateSubobjects(UActorChannel* Channel, FOutBunch* Bunch, FReplicationFlags* RepFlags) override;
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 protected:
+
 	// Called when the game starts
 	virtual void BeginPlay() override;
 
-#pragma region Inventory
-
-	// Inventory Array
-	UPROPERTY(BlueprintReadOnly, Instanced, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"), Category = "Inventory Framework|Inventory")
-	TArray<TObjectPtr<UInventoryItem>> Items; // The array that holds the items in the inventory, using TObjectPtr for safe memory management and garbage collection
+#pragma region InventoryProperties
 
 	// Inventory Size
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"), Category = "Inventory Framework|Inventory")
-	int Size = 10; // The maximum number of items that can be stored in the inventory
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|Inventory")
+	int Size = 10;
 
-	// EVENTS
+#pragma endregion InventoryProperties
 
-	UPROPERTY(BlueprintAssignable)
-	FOnInventoryChanged OnInventoryChanged; // Event triggered when the inventory changes (item added, removed, etc.)
+#pragma region InternalMultiplayerInventory
 
-#pragma endregion Inventory
+	UPROPERTY(ReplicatedUsing = OnRep_Items, BlueprintReadOnly,meta = (AllowPrivateAccess = "true"), Instanced, Category = "Inventory Framework|Inventory")
+	TArray<TObjectPtr<UInventoryItem>> Items;
 
-public:	
+#pragma endregion InternalMultiplayerInventory
 
-#pragma region Helpers
+public:
 
-	// Get Size of the Inventory
+#pragma region InventoryQueries
+
+	// Get inventory size
 	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
-	int GetSize() const; // const because it doesn't modify the inventory // Get the size of the inventory
+	int GetSize() const;
 
-	// Get all items in the inventory
+	// Get all items in inventory
 	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
-	const TArray<UInventoryItem*> GetAllItems() const; // const because it doesn't modify the inventory // Get all items in the inventory
+	const TArray<UInventoryItem*>& GetAllItems() const;
 
-#pragma endregion Helpers
+	// Check if inventory is full
+	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
+	bool IsInventoryFull() const;
+
+	// Check if inventory has at least one free slot
+	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
+	bool HasFreeSlot() const;
+
+	// Get total free slot count
+	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
+	int GetFreeSlotCount() const;
+
+	// Check if inventory contains item definition
+	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
+	bool ContainsItem(UInventoryItemDefinition* ItemDefinition) const;
+
+	// Check if inventory can fit item amount
+	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
+	bool HasSpaceForItem(UInventoryItemDefinition* ItemDefinition, int Amount) const;
+
+#pragma endregion InventoryQueries
 
 #pragma region InventoryFunctions
 
-	// Get Item by Definition // Data Asset used to define the item
+	// Find item by definition
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Framework|Inventory")
-	bool FindItemByDefinition(UInventoryItemDefinition* ItemDefinition, int& Index) const; // returns true if the item was found in the inventory, and sets the index of the item in the inventory
+	bool FindItemByDefinition(UInventoryItemDefinition* ItemDefinition, int& Index) const;
 
-	// Remove Item Amount by Definition // Data Asset used to define the item
+	// Add item-s to inventory
 	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
-	bool RemoveItemAmountByDefinition(UInventoryItemDefinition* ItemDefinition, int Amount = 1); // returns true if the item was removed successfully
+	bool AddItem(UInventoryItemDefinition* ItemDefinition, int Amount = 1);
 
-	// Get Item Amount by Definition // Data Asset used to define the item
+	// Remove item amount by definition
+	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
+	bool RemoveItemAmountByDefinition(UInventoryItemDefinition* ItemDefinition, int Amount = 1);
+
+	// Get total amount of item definition
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Framework|Inventory")
-	int GetItemAmountByDefinition(UInventoryItemDefinition* ItemDefinition) const; // returns the amount of items in the inventory that match the given definition
+	int GetItemAmountByDefinition(UInventoryItemDefinition* ItemDefinition) const;
 
-	// Add Item by Definition // Data Asset used to define the item
+	// Remove item at slot index
 	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
-	bool AddItem(UInventoryItemDefinition* ItemDefinition, int Amount = 1); // returns true if the item was added successfully
-
-	// Remove Item at Index
-	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
-	bool RemoveItemAt(int ItemIndex); // returns true if the item was removed successfully
+	bool RemoveItemAt(int ItemIndex);
 
 #pragma endregion InventoryFunctions
-		
+
+#pragma region InventoryDragDropFunctions
+
+	bool MoveItem(int FromIndex, int ToIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory|DragDrop")
+	bool TransferItemTo(
+		UInventoryComponent* TargetInventory,
+		int SourceIndex,
+		int TargetIndex);
+
+#pragma endregion InventoryDragDropFunctions
+
+#pragma region Multiplayer
+
+	// OnRep for items array
+	UFUNCTION()
+	void OnRep_Items();
+
+#pragma endregion Multiplayer
+
+#pragma region UI
+
+	// Event triggered when the inventory changes
+	UPROPERTY(BlueprintAssignable, Category = "Inventory Framework|Events")
+	FOnInventoryChanged OnInventoryChanged;
+
+#pragma endregion UI
+
+private:
+
+#pragma region InternalHelpers
+
+	// Create inventory item 
+	UInventoryItem* CreateInventoryItem(UInventoryItemDefinition* ItemDefinition, int StackAmount);
+
+	// Find first empty inventory slot
+	int FindFirstEmptySlot() const;
+
+	// Check if item can stack
+	bool CanStackItem(const UInventoryItem* Item, const UInventoryItemDefinition* Definition) const;
+
+	// Get remaining stack space
+	int GetRemainingStackSpace(const UInventoryItem* Item) const;
+
+	// Broadcast inventory changed event
+	void NotifyInventoryChanged() const;
+
+	// Drag and drop helper functions
+
+	// Check if slot index is valid
+	bool IsValidSlotIndex(int Index) const;
+
+	// Check if item can be stacked with another item
+	bool CanMergeStacks(
+		UInventoryItem* SourceItem,
+		UInventoryItem* TargetItem) const;
+
+#pragma endregion InternalHelpers
+
 };

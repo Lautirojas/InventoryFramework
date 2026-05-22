@@ -29,7 +29,7 @@ public:
 	TObjectPtr<UStreamableRenderAsset> WorldMesh;
 	
 	// The maximum number of items that can be stacked together in the inventory. If MaxStackNumber is greater than 1, then multiple instances of this item can be combined into a single stack in the inventory, up to the specified maximum. If MaxStackNumber is 1, then each instance of this item will occupy its own slot in the inventory and cannot be stacked with other instances.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|Inventory")
-	int MaxStackNumber = 1;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|Inventory", meta = (ClampMin = "1"))
+	int32 MaxStackNumber = 1;
 
 };

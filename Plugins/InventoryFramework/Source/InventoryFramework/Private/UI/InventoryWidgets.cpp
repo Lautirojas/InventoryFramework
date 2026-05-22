@@ -9,6 +9,12 @@
 #include "Items/Instances/InventoryItem.h"
 #include "Items/Definitions/InventoryItemDefinition.h"
 #include "Components/InventoryComponent.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "UI/InventoryDragDropOperation.h"
+#include "Input/Reply.h"
+#include "InputCoreTypes.h"
+#include "InventoryFrameworklog.h"
+
 
 void UInventoryItemWidget::SetItemData(UInventoryItem* InventoryItem)
 {
@@ -50,31 +56,185 @@ void UInventoryItemWidget::SetItemData(UInventoryItem* InventoryItem)
 
 void UInventoryGridWidget::SetInventoryData(UInventoryComponent* NewInventory)
 {
-	// Clear existing items
-	Grid->ClearChildren();
+	if (!IsValid(NewInventory))
+	{
+		return;
+	}
+
+	// unbind previous inventory
+	if (Inventory.IsValid())
+	{
+		Inventory.Get()->OnInventoryChanged.RemoveAll(this);
+	}
 
 	Inventory = NewInventory;
 
-	const TArray<UInventoryItem*>& Items = NewInventory->GetAllItems();
+	// bind inventory delegate
+	NewInventory->OnInventoryChanged.AddDynamic(
+		this,
+		&UInventoryGridWidget::RefreshInventory);
 
-	// For Each item in inventory, create a new InventoryItemWidget and add to grid
-	for (int i = 0; i < NewInventory->GetSize(); ++i)
+	// initial refresh
+	RefreshInventory();
+}
+
+void UInventoryGridWidget::RefreshInventory()
+{
+	if (!Inventory.IsValid())
 	{
-		UInventoryItemWidget* NewItemWidget = CreateWidget<UInventoryItemWidget>(GetWorld(), ItemWidgetClass);
+		return;
+	}
 
-		if (i < Items.Num())
+	if (!Grid)
+	{
+		return;
+	}
+
+	Grid->ClearChildren();
+
+	const TArray<UInventoryItem*>& Items =
+		Inventory->GetAllItems();
+
+	UE_LOG(LogInventoryFramework, Log, TEXT("Refreshing Inventory Grid with %d items"), Items.Num());
+
+	for (int i = 0; i < Items.Num(); ++i)
+	{
+		UInventoryItemWidget* NewItemWidget =
+			CreateWidget<UInventoryItemWidget>(
+				GetWorld(),
+				ItemWidgetClass);
+
+		if (!ensure(NewItemWidget))
 		{
-			NewItemWidget->SetItemData(Items[i]);
-		}
-		else
-		{
-			NewItemWidget->SetItemData(nullptr);
+			continue;
 		}
 
-		UUniformGridSlot* GridSlot = Grid->AddChildToUniformGrid(NewItemWidget);
+		NewItemWidget->ParentGridWidget = this;
+		NewItemWidget->Inventory = Inventory;
+		NewItemWidget->SlotIndex = i;
+
+		NewItemWidget->SetItemData(Items[i]);
+
+		UUniformGridSlot* GridSlot =
+			Grid->AddChildToUniformGrid(NewItemWidget);
+
 		GridSlot->SetColumn(i % Columns);
 		GridSlot->SetRow(i / Columns);
-		GridSlot->SetHorizontalAlignment(EHorizontalAlignment::HAlign_Fill);
-		GridSlot->SetVerticalAlignment(EVerticalAlignment::VAlign_Fill);
+		GridSlot->SetHorizontalAlignment(HAlign_Fill);
+		GridSlot->SetVerticalAlignment(VAlign_Fill);
 	}
 }
+
+void UInventoryGridWidget::NativeDestruct()
+{
+	if (Inventory.IsValid())
+	{
+		Inventory.Get()->OnInventoryChanged.RemoveAll(this);
+	}
+
+
+	Super::NativeDestruct();
+}
+
+void UInventoryGridWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	if (IsValid(InventoryComponent))
+	{
+		SetInventoryData(InventoryComponent);
+	}
+}
+
+bool UInventoryGridWidget::HandleItemDrop(
+	UDragDropOperation* InOperation,
+	int TargetIndex) const
+{
+	const UInventoryDragDropOperation* DragOperation =
+		Cast<UInventoryDragDropOperation>(InOperation);
+
+	if (!DragOperation)
+	{
+		return false;
+	}
+
+	if (!Inventory.IsValid() ||
+		!DragOperation->SourceInventory.IsValid())
+	{
+		return false;
+	}
+
+	// Broadcast transfer request
+	OnInventoryTransferRequested.Broadcast(
+		DragOperation->SourceInventory.Get(),
+		Inventory.Get(),
+		DragOperation->SourceIndex,
+		TargetIndex);
+
+	return true;
+}
+
+#pragma region ItemDragDropFunctions
+
+		FReply UInventoryItemWidget::NativeOnMouseButtonDown(
+			const FGeometry& InGeometry,
+			const FPointerEvent& InMouseEvent)
+		{
+			return UWidgetBlueprintLibrary::DetectDragIfPressed(
+				InMouseEvent,
+				this,
+				EKeys::LeftMouseButton).NativeReply;
+		}
+
+		void UInventoryItemWidget::NativeOnDragDetected(
+			const FGeometry& InGeometry,
+			const FPointerEvent& InMouseEvent,
+			UDragDropOperation*& OutOperation)
+		{
+			UInventoryDragDropOperation* DragOperation =
+				NewObject<UInventoryDragDropOperation>();
+
+			DragOperation->SourceInventory = Inventory;
+			DragOperation->DefaultDragVisual = this;
+			DragOperation->SourceIndex = SlotIndex;
+
+			OutOperation = DragOperation;
+		}
+
+		bool UInventoryItemWidget::NativeOnDrop(
+			const FGeometry& InGeometry,
+			const FDragDropEvent& InDragDropEvent,
+			UDragDropOperation* InOperation)
+		{
+			const UInventoryDragDropOperation* DragOperation =
+				Cast<UInventoryDragDropOperation>(InOperation);
+
+			if (!DragOperation)
+			{
+				return false;
+			}
+
+			//if (!Inventory.IsValid() ||
+			//	!DragOperation->SourceInventory.IsValid())
+			//{
+			//	return false;
+			//}
+
+			if (!ParentGridWidget)
+			{
+				return false;
+			}
+
+			//DragOperation->SourceInventory->TransferItemTo(
+			//	Inventory.Get(),
+			//	DragOperation->SourceIndex,
+			//	SlotIndex);
+
+			ParentGridWidget->HandleItemDrop(
+				InOperation,
+				SlotIndex);
+
+			return true;
+		}
+
+#pragma endregion ItemDragDropFunctions

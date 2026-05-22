@@ -5,13 +5,18 @@
 
 class UItemDefinition;
 
-UCLASS(BlueprintType, EditInlineNew)
+UCLASS(Abstract, BlueprintType, EditInlineNew)
 class INVENTORYFRAMEWORK_API UItemInstance : public UObject
 {
     GENERATED_BODY()
 
 public:
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|Instance")
+
+    virtual bool IsSupportedForNetworking() const override;
+
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+    UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|Instance")
 	TObjectPtr<UItemDefinition> Definition = nullptr; // The definition of the item, using TObjectPtr for safe memory management and garbage collection
 
     template<typename T>

@@ -5,6 +5,15 @@
 #include "Blueprint/UserWidget.h"
 #include "InventoryWidgets.generated.h"
 
+// Delegates
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
+	FOnInventoryTransferRequested,
+	UInventoryComponent*, SourceInventory,
+	UInventoryComponent*, TargetInventory,
+	int, SourceIndex,
+	int, TargetIndex);
+
+
 // Forward Declarations
 class UInventoryItem;
 class UImage;
@@ -34,9 +43,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory Framework| UI | Items")
 	void SetInventoryData(UInventoryComponent* NewInventory);
 
-protected:
-	UPROPERTY(BlueprintReadOnly, Category = "Inventory Framework| UI | Items")
+	UPROPERTY(BlueprintReadOnly,
+		meta = (ExposeOnSpawn = "true"),
+		Category = "Inventory Framework|UI|Items")
+	TObjectPtr<UInventoryComponent> InventoryComponent;
+
 	TWeakObjectPtr<UInventoryComponent> Inventory;
+
+	UPROPERTY(BlueprintAssignable)
+	FOnInventoryTransferRequested
+		OnInventoryTransferRequested;
+
+
+	bool HandleItemDrop(UDragDropOperation* InOperation, int TargetIndex) const;
+
+protected:
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory Framework| UI | Items")
+	void RefreshInventory();
+
+	virtual void NativeDestruct() override;
+	virtual void NativeConstruct() override;
 };
 
 UCLASS()
@@ -45,6 +72,10 @@ class INVENTORYFRAMEWORK_API UInventoryItemWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+
+	UPROPERTY()
+	TObjectPtr<UInventoryGridWidget> ParentGridWidget;
+
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
 	TObjectPtr<UImage> ItemImage;
 
@@ -65,4 +96,28 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory Framework| UI | Items")
 	void OnSetItemData(UInventoryItem* InventoryItem);
+
+	// Drag and Drop
+
+	virtual FReply NativeOnMouseButtonDown(
+		const FGeometry& InGeometry,
+		const FPointerEvent& InMouseEvent) override;
+
+	virtual void NativeOnDragDetected(
+		const FGeometry& InGeometry,
+		const FPointerEvent& InMouseEvent,
+		UDragDropOperation*& OutOperation) override;
+
+	virtual bool NativeOnDrop(
+		const FGeometry& InGeometry,
+		const FDragDropEvent& InDragDropEvent,
+		UDragDropOperation* InOperation) override;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory Framework|UI|Items")
+	int SlotIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory Framework|UI|Items")
+	TWeakObjectPtr<UInventoryComponent> Inventory;
+
+
 };

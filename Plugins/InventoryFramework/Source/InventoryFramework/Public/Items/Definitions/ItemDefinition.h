@@ -25,7 +25,7 @@ public:
 	TArray<TObjectPtr<UItemFragment>> Fragments; // An array of item fragments that define the behavior and properties of the item, using TObjectPtr for safe memory management and garbage collection
 
 	// The class of the item instance that will be created when this item is acquired
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|ItemDefinition")
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|ItemDefinition") //meta = (AllowAbstract = false)
 	TSubclassOf<UItemInstance> InstanceClass; // The class of the item instance that will be created when this item is acquired, using TSubclassOf for safe type checking and editor integration
 
 	// Display properties for the item
