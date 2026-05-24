@@ -16,6 +16,12 @@ class INVENTORYFRAMEWORK_API UInventoryComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
+
+protected:
+
+	// Called when the game starts
+	virtual void BeginPlay() override;
+
 public:
 
 	// Constructor
@@ -25,36 +31,31 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-protected:
-
-	// Called when the game starts
-	virtual void BeginPlay() override;
-
 #pragma region InventoryProperties
 
 	// Inventory Size
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|Inventory")
 	int Size = 10;
 
+	#pragma region Multiplayer
+
+		UPROPERTY(ReplicatedUsing = OnRep_Items, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"), Instanced, Category = "Inventory Framework|Inventory")
+		TArray<TObjectPtr<UInventoryItem>> Items;
+
+	#pragma endregion Multiplayer
+
 #pragma endregion InventoryProperties
-
-#pragma region InternalMultiplayerInventory
-
-	UPROPERTY(ReplicatedUsing = OnRep_Items, BlueprintReadOnly,meta = (AllowPrivateAccess = "true"), Instanced, Category = "Inventory Framework|Inventory")
-	TArray<TObjectPtr<UInventoryItem>> Items;
-
-#pragma endregion InternalMultiplayerInventory
 
 public:
 
 #pragma region InventoryQueries
 
-	// Get inventory size
+	// Returns the total slot capacity of the inventory.
 	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
 	int GetSize() const;
 
 	// Get all items in inventory
-	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Framework|Inventory")
 	const TArray<UInventoryItem*>& GetAllItems() const;
 
 	// Check if inventory is full
@@ -71,19 +72,23 @@ public:
 
 	// Check if inventory contains item definition
 	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
-	bool ContainsItem(UInventoryItemDefinition* ItemDefinition) const;
+	bool ContainsItemDefinition(UInventoryItemDefinition* ItemDefinition) const;
 
 	// Check if inventory can fit item amount
 	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
 	bool HasSpaceForItem(UInventoryItemDefinition* ItemDefinition, int Amount) const;
 
+	// Find item index by definition
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Framework|Inventory")
+	bool FindItemIndexByDefinition(UInventoryItemDefinition* ItemDefinition, int& Index) const;
+
+	// Get total amount of item definition
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Framework|Inventory")
+	int GetItemAmountByDefinition(UInventoryItemDefinition* ItemDefinition) const;
+
 #pragma endregion InventoryQueries
 
-#pragma region InventoryFunctions
-
-	// Find item by definition
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Framework|Inventory")
-	bool FindItemByDefinition(UInventoryItemDefinition* ItemDefinition, int& Index) const;
+#pragma region InventoryMutation
 
 	// Add item-s to inventory
 	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
@@ -93,17 +98,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
 	bool RemoveItemAmountByDefinition(UInventoryItemDefinition* ItemDefinition, int Amount = 1);
 
-	// Get total amount of item definition
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Framework|Inventory")
-	int GetItemAmountByDefinition(UInventoryItemDefinition* ItemDefinition) const;
-
 	// Remove item at slot index
 	UFUNCTION(BlueprintCallable, Category = "Inventory Framework|Inventory")
 	bool RemoveItemAt(int ItemIndex);
 
-#pragma endregion InventoryFunctions
+#pragma endregion InventoryMutation
 
-#pragma region InventoryDragDropFunctions
+#pragma region InventoryTransfer
 
 	bool MoveItem(int FromIndex, int ToIndex);
 
@@ -113,7 +114,7 @@ public:
 		int SourceIndex,
 		int TargetIndex);
 
-#pragma endregion InventoryDragDropFunctions
+#pragma endregion InventoryTransfer
 
 #pragma region Multiplayer
 
@@ -123,13 +124,13 @@ public:
 
 #pragma endregion Multiplayer
 
-#pragma region UI
+#pragma region Events
 
 	// Event triggered when the inventory changes
 	UPROPERTY(BlueprintAssignable, Category = "Inventory Framework|Events")
 	FOnInventoryChanged OnInventoryChanged;
 
-#pragma endregion UI
+#pragma endregion Events
 
 private:
 
@@ -141,24 +142,13 @@ private:
 	// Find first empty inventory slot
 	int FindFirstEmptySlot() const;
 
-	// Check if item can stack
-	bool CanStackItem(const UInventoryItem* Item, const UInventoryItemDefinition* Definition) const;
-
-	// Get remaining stack space
-	int GetRemainingStackSpace(const UInventoryItem* Item) const;
-
 	// Broadcast inventory changed event
-	void NotifyInventoryChanged() const;
+	void NotifyInventoryChanged();
 
 	// Drag and drop helper functions
 
 	// Check if slot index is valid
 	bool IsValidSlotIndex(int Index) const;
-
-	// Check if item can be stacked with another item
-	bool CanMergeStacks(
-		UInventoryItem* SourceItem,
-		UInventoryItem* TargetItem) const;
 
 #pragma endregion InternalHelpers
 

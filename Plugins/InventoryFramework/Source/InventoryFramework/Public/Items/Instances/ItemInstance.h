@@ -16,12 +16,21 @@ public:
 
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-    UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|Instance")
+    UPROPERTY(Replicated, VisibleAnywhere, Category = "Inventory Framework|Item Instance")
 	TObjectPtr<UItemDefinition> Definition = nullptr; // The definition of the item, using TObjectPtr for safe memory management and garbage collection
 
     template<typename T>
-	const T* GetDefinition() const // Template function to get the item definition as a specific class
+	const T* GetDefinitionAs() const // Template function to get the item definition as a specific class
     {
         return Cast<T>(Definition);
+    }
+
+    // Helpers
+
+    // Get Item Definition
+    UFUNCTION(BlueprintPure, Category = "Inventory Framework|Item Instance")
+    UItemDefinition* GetItemDefinition() const
+    {
+        return Definition;
     }
 };

@@ -8,8 +8,6 @@
 
 // Forward Declarations
 class UItemInstance;
-class UAbilitySystemComponent;
-class UItemFragment_GrantCard;
 
 UCLASS(BlueprintType)
 class INVENTORYFRAMEWORK_API UItemDefinition : public UPrimaryDataAsset
@@ -18,30 +16,35 @@ class INVENTORYFRAMEWORK_API UItemDefinition : public UPrimaryDataAsset
 
 public:
 
+	UItemDefinition();
+
 	// Properties
 
 	// The fragments that define the behavior and properties of the item
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Instanced, Category = "Inventory Framework|ItemDefinition")
-	TArray<TObjectPtr<UItemFragment>> Fragments; // An array of item fragments that define the behavior and properties of the item, using TObjectPtr for safe memory management and garbage collection
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Instanced, Category = "Inventory Framework|Item Definition")
+	TArray<TObjectPtr<UItemFragment>> Fragments; 
 
 	// The class of the item instance that will be created when this item is acquired
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|ItemDefinition") //meta = (AllowAbstract = false)
-	TSubclassOf<UItemInstance> InstanceClass; // The class of the item instance that will be created when this item is acquired, using TSubclassOf for safe type checking and editor integration
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|Item Definition") //meta = (AllowAbstract = false)
+    TSubclassOf<UItemInstance> InstanceClass;
 
 	// Display properties for the item
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|ItemDefinition")
-	FText Name; // The display name of the item, using FText for localization support
 
-	// The icon that represents the item in the UI
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|ItemDefinition")
-	TObjectPtr<UTexture2D> Icon = nullptr; // The icon that represents the item in the UI
+    // Name
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|Item Definition")
+	FText Name;
 
-	// A description of the item, which can be used in tooltips or other UI elements
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|ItemDefinition")
+	// Icon
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|Item Definition")
+	TObjectPtr<UTexture2D> Icon = nullptr;
+
+	// Description
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Framework|Item Definition")
     FText Description;
 
-// Functions can be Override and Implement in Child Classes
+    // Functions can be Override and Implement in Child Classes
 
+    UFUNCTION(BlueprintCallable, BlueprintPure)
     virtual UTexture2D* GetIcon() const
     {
         return Icon;
@@ -52,14 +55,14 @@ public:
         return Name;
     }
 
-    void OnItemAcquired(AActor* Buyer) const;
+    virtual void OnItemAcquired(AActor* Buyer) const;
 
 	// Template function to find a fragment of a specific class in the Fragments array
 
     template <typename T>
     const T* FindFragmentByClass() const
     {
-        for (UItemFragment* Fragment : Fragments)
+        for (const UItemFragment* Fragment : Fragments)
         {
             if (const T* TypedFragment = Cast<T>(Fragment))
             {

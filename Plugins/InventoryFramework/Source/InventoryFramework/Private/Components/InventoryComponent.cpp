@@ -9,7 +9,7 @@
 #include "Engine/ActorChannel.h"
 #include "InventoryFrameworklog.h"
 
-// Sets default values for this component's properties
+// Sets default values 
 UInventoryComponent::UInventoryComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -40,12 +40,12 @@ bool UInventoryComponent::ReplicateSubobjects(UActorChannel* Channel, FOutBunch*
 	return WroteSomething;
 }
 
-// Called when the game starts
 void UInventoryComponent::BeginPlay()
 {
-	Super::BeginPlay();
-	
-	Items.SetNum(Size);
+	if (Items.Num() == 0)
+	{
+		Items.Init(nullptr, Size);
+	}
 }
 
 #pragma region InventoryQueries
@@ -57,8 +57,6 @@ int UInventoryComponent::GetSize() const
 
 const TArray<UInventoryItem*>& UInventoryComponent::GetAllItems() const
 {
-	check(this);
-
 	return Items;
 }
 
@@ -93,7 +91,7 @@ int UInventoryComponent::GetFreeSlotCount() const
 	return FreeSlots;
 }
 
-bool UInventoryComponent::ContainsItem(UInventoryItemDefinition* ItemDefinition) const
+bool UInventoryComponent::ContainsItemDefinition(UInventoryItemDefinition* ItemDefinition) const
 {
 	if (!IsValid(ItemDefinition))
 	{
@@ -102,7 +100,7 @@ bool UInventoryComponent::ContainsItem(UInventoryItemDefinition* ItemDefinition)
 
 	for (const UInventoryItem* Item : Items)
 	{
-		if (Item && Item->Definition == ItemDefinition)
+		if (Item && Item->HasDefinition(ItemDefinition))
 		{
 			return true;
 		}
@@ -123,9 +121,10 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 	// First try stacking into existing stacks
 	for (const UInventoryItem* Item : Items)
 	{
-		if (CanStackItem(Item, ItemDefinition))
+		if (Item &&
+			Item->CanMergeWithDefinition(ItemDefinition))
 		{
-			RemainingAmount -= GetRemainingStackSpace(Item);
+			RemainingAmount -= Item->GetRemainingStackSpace();
 
 			if (RemainingAmount <= 0)
 			{
@@ -135,7 +134,7 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 	}
 
 	// Then calculate how many items fit into free slots
-	const int MaxStack = ItemDefinition->MaxStackNumber;
+	const int MaxStack = ItemDefinition->MaxStackSize;
 	const int FreeSlots = GetFreeSlotCount();
 
 	const int CapacityFromFreeSlots = FreeSlots * MaxStack;
@@ -147,13 +146,13 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 
 #pragma region InventoryFunctions
 
-	#pragma region CoreFunctions
+	#pragma region Mutable
 
-		bool UInventoryComponent::FindItemByDefinition(UInventoryItemDefinition* ItemDefinition, int& Index) const
+		bool UInventoryComponent::FindItemIndexByDefinition(UInventoryItemDefinition* ItemDefinition, int& Index) const
 		{
 			// Validate input parameters
 
-			if (!ItemDefinition)
+			if (!IsValid(ItemDefinition))
 			{
 				return false;
 			}
@@ -162,7 +161,7 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 
 			for (Index = 0; Index < Items.Num(); ++Index)
 			{
-				if (Items[Index] && Items[Index]->Definition == ItemDefinition)
+				if (Items[Index] && Items[Index]->HasDefinition(ItemDefinition))
 				{
 					return true;
 				}
@@ -204,7 +203,7 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 
 				const int AmountToRemove = FMath::Min(RemainingAmount, Item->StackAmount);
 
-				Item->StackAmount -= AmountToRemove;
+				Item->RemoveFromStack(AmountToRemove);
 				RemainingAmount -= AmountToRemove;
 
 				// Remove empty stacks
@@ -215,12 +214,6 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 				}
 			}
 
-			// Remove trailing empty slots
-
-			while (!Items.IsEmpty() && !IsValid(Items.Last()))
-			{
-				Items.Pop();
-			}
 
 			if (RemainingAmount != 0)
 			{
@@ -261,9 +254,9 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 				return false;
 			}
 
-			if (!ensure(ItemDefinition->MaxStackNumber > 0))
+			if (!ensure(ItemDefinition->MaxStackSize > 0))
 			{
-				UE_LOG(LogInventoryFramework, Warning, TEXT("AddItem failed: Invalid MaxStackNumber in ItemDefinition"));
+				UE_LOG(LogInventoryFramework, Warning, TEXT("AddItem failed: Invalid MaxStackSize in ItemDefinition"));
 				return false;
 			}
 
@@ -281,15 +274,19 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 
 			for (UInventoryItem* Item : Items)
 			{
-				if (CanStackItem(Item, ItemDefinition))
+				if (Item &&
+					Item->CanMergeWithDefinition(ItemDefinition))
 				{
-					const int SpaceLeft = GetRemainingStackSpace(Item);
-					const int AmountToAdd = FMath::Min(RemainingAmount, SpaceLeft);
+					const int32 SpaceLeft =
+						Item->GetRemainingStackSpace();
 
-					Item->StackAmount += AmountToAdd;
+					const int32 AmountToAdd =
+						FMath::Min(RemainingAmount, SpaceLeft);
+
+					Item->AddToStack(AmountToAdd);
+
 					RemainingAmount -= AmountToAdd;
 
-					// if the remaining amount is 0 or less, we are done and can exit early
 					if (RemainingAmount <= 0)
 					{
 						NotifyInventoryChanged();
@@ -312,7 +309,7 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 				}
 
 				const int StackAmount =
-					FMath::Min(RemainingAmount, ItemDefinition->MaxStackNumber);
+					FMath::Min(RemainingAmount, ItemDefinition->MaxStackSize);
 
 				UInventoryItem* NewItem =
 					CreateInventoryItem(ItemDefinition, StackAmount);
@@ -353,9 +350,9 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 			return true;
 		}
 
-	#pragma endregion CoreFunctions
+	#pragma endregion Mutable
 
-	#pragma region InventoryDragDropFunctions
+	#pragma region InventoryTransfer
 
 		bool UInventoryComponent::MoveItem(int FromIndex, int ToIndex)
 		{
@@ -378,30 +375,12 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 				return false;
 			}
 
-			// STACKING
-			if (CanMergeStacks(SourceItem, TargetItem))
+			// Attempt stack merge first 
+			if (TargetItem &&
+				TargetItem->CanMergeWith(SourceItem))
 			{
-				const UInventoryItemDefinition* InventoryDefinition =
-					Cast<UInventoryItemDefinition>(TargetItem->Definition);
+				TargetItem->MergeFrom(SourceItem);
 
-				if (!InventoryDefinition)
-				{
-					return false;
-				}
-
-				const int MaxStack =
-					InventoryDefinition->MaxStackNumber;
-
-				const int SpaceLeft =
-					MaxStack - TargetItem->StackAmount;
-
-				const int AmountToMove =
-					FMath::Min(SourceItem->StackAmount, SpaceLeft);
-
-				TargetItem->StackAmount += AmountToMove;
-				SourceItem->StackAmount -= AmountToMove;
-
-				// remove source stack if empty
 				if (SourceItem->StackAmount <= 0)
 				{
 					Items[FromIndex] = nullptr;
@@ -409,8 +388,9 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 			}
 			else
 			{
-				// SWAP
-				Items.Swap(FromIndex, ToIndex);
+				Swap(
+					Items[FromIndex],
+					Items[ToIndex]);
 			}
 
 			NotifyInventoryChanged();
@@ -452,41 +432,22 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 			UInventoryItem* TargetItem =
 				TargetInventory->Items[TargetIndex];
 
-			// STACK INTO TARGET
-			if (TargetInventory->CanMergeStacks(
-				SourceItem,
-				TargetItem))
+			// STACK INTO TARGET INVENTORY
+			if (TargetItem &&
+				TargetItem->CanMergeWith(SourceItem))
 			{
-				const UInventoryItemDefinition* InventoryDefinition =
-					Cast<UInventoryItemDefinition>(TargetItem->Definition);
+				TargetItem->MergeFrom(SourceItem);
 
-				if (!InventoryDefinition)
-				{
-					return false;
-				}
-
-				const int MaxStack =
-					InventoryDefinition->MaxStackNumber;
-
-				const int SpaceLeft =
-					MaxStack - TargetItem->StackAmount;
-
-				const int AmountToMove =
-					FMath::Min(SourceItem->StackAmount, SpaceLeft);
-
-				TargetItem->StackAmount += AmountToMove;
-				SourceItem->StackAmount -= AmountToMove;
-
-				if (SourceItem->StackAmount <= 0)
+				if (SourceItem->IsEmpty())
 				{
 					Items[SourceIndex] = nullptr;
 				}
 			}
 			else
 			{
-				// SWAP BETWEEN INVENTORIES
-				TargetInventory->Items[TargetIndex] = SourceItem;
-				Items[SourceIndex] = TargetItem;
+				Swap(
+					TargetInventory->Items[TargetIndex],
+					Items[SourceIndex]);
 			}
 
 			NotifyInventoryChanged();
@@ -496,11 +457,9 @@ bool UInventoryComponent::HasSpaceForItem(UInventoryItemDefinition* ItemDefiniti
 		}
 
 
-	#pragma endregion InventoryDragDropFunctions
+	#pragma endregion InventoryTransfer
 
 #pragma endregion InventoryFunctions
-
-
 
 #pragma region InternalHelpers
 
@@ -518,8 +477,9 @@ UInventoryItem* UInventoryComponent::CreateInventoryItem(UInventoryItemDefinitio
 		return nullptr;
 	}
 
-	NewItem->Definition = ItemDefinition;
-	NewItem->StackAmount = StackAmount;
+	NewItem->Initialize(
+		ItemDefinition,
+		StackAmount);
 
 	return NewItem;
 }
@@ -537,37 +497,12 @@ int UInventoryComponent::FindFirstEmptySlot() const
 	return INDEX_NONE;
 }
 
-bool UInventoryComponent::CanStackItem(const UInventoryItem* Item, const UInventoryItemDefinition* Definition) const
-	{
-		return Item &&
-			Definition &&
-			Item->Definition == Definition &&
-			Item->StackAmount < Definition->MaxStackNumber;
-	}
-
-int UInventoryComponent::GetRemainingStackSpace(const UInventoryItem* Item) const
-	{
-		if (!Item || !Item->Definition)
-		{
-			return 0;
-		}
-
-		const UInventoryItemDefinition* InventoryDefinition = Cast<UInventoryItemDefinition>(Item->Definition);
-
-		if (!InventoryDefinition)
-		{
-			return 0;
-		}
-
-		return InventoryDefinition->MaxStackNumber - Item->StackAmount;
-	}
-
 void UInventoryComponent::OnRep_Items()
 {
 	NotifyInventoryChanged();
 }
 
-void UInventoryComponent::NotifyInventoryChanged() const
+void UInventoryComponent::NotifyInventoryChanged()
 {
 	OnInventoryChanged.Broadcast();
 }
@@ -577,28 +512,5 @@ bool UInventoryComponent::IsValidSlotIndex(int Index) const
 	return Items.IsValidIndex(Index);
 }
 
-bool UInventoryComponent::CanMergeStacks(UInventoryItem* SourceItem, UInventoryItem* TargetItem) const
-{
-	if (!IsValid(SourceItem) || !IsValid(TargetItem))
-	{
-		return false;
-	}
-
-	if (SourceItem->Definition != TargetItem->Definition)
-	{
-		return false;
-	}
-
-	const UInventoryItemDefinition* InventoryDefinition =
-		Cast<UInventoryItemDefinition>(TargetItem->Definition);
-
-	if (!InventoryDefinition)
-	{
-		return false;
-	}
-
-	return TargetItem->StackAmount <
-		InventoryDefinition->MaxStackNumber;
-}
 
 #pragma endregion InternalHelpers
