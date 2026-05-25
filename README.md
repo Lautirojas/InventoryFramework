@@ -38,12 +38,16 @@ Designed with reusable systems architecture in mind, supporting:
 * Slot swapping and stack merging
 * Framework-agnostic UI architecture
 
-### Architecture
+## Architecture Overview
 
-* Plugin-based modular design
-* Item Definitions / Item Instances separation
-* Extensible Item Fragment system
-* Decoupled gameplay and UI logic
+The framework separates:
+
+- Item Definitions (static asset data)
+- Item Instances (runtime replicated state)
+- Inventory Components (storage and transfer logic)
+- UI Widgets (presentation and drag & drop interactions)
+
+This architecture allows inventories to remain modular, extensible, and multiplayer-safe.
 
 ---
 
@@ -58,6 +62,15 @@ The repository includes an example sandbox project demonstrating:
 
 ---
 
+## Installation
+
+1. Copy the plugin into your project's `Plugins/` folder
+2. Regenerate project files
+3. Build the project
+4. Enable the plugin from the Unreal Editor if required
+
+---
+
 ## Status
 
 Stable initial release (v1.0.0).
@@ -65,6 +78,6 @@ Stable initial release (v1.0.0).
 The framework is actively maintained and may continue evolving with additional systems and improvements.
 ---
 
-## Engine Version
+## Supported Engine Version
 
-Developed with Unreal Engine 5.7
+Unreal Engine 5.7
