@@ -60,9 +60,9 @@ The repository includes an example sandbox project demonstrating:
 
 ## Status
 
-Currently under active development.
-API and architecture may evolve over time.
+Stable initial release (v1.0.0).
 
+The framework is actively maintained and may continue evolving with additional systems and improvements.
 ---
 
 ## Engine Version
